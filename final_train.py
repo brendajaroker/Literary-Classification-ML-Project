@@ -121,9 +121,20 @@ def create_data_splits(X, y, test_size, val_size, random_state):
     
     return X_train, X_val, X_test, y_train, y_val, y_test
 
-def scale_features(X_train, X_val, X_test, model_name='default'):
+
+def scale_features(X_train, X_val, X_test=None, model_name='default'):
     """
     Scale/clip features using StandardScaler or RobustScaler based on model.
+
+    Args:
+        X_train: Training features
+        X_val: Validation features
+        X_test: Test features (optional, defaults to None)
+        model_name: Model name to determine scaler type ('knn' or 'default')
+
+    Returns:
+        Tuple of (X_train_scaled, X_val_scaled, X_test_scaled, scaler):
+        Scaled training, validation, and test data (X_test_scaled is None if X_test is None), plus scaler object
     """
     if model_name == 'knn':
         scaler = RobustScaler()
@@ -132,14 +143,17 @@ def scale_features(X_train, X_val, X_test, model_name='default'):
     
     X_train_scaled = scaler.fit_transform(X_train)
     X_val_scaled = scaler.transform(X_val)
-    X_test_scaled = scaler.transform(X_test)
+    X_test_scaled = scaler.transform(X_test) if X_test is not None else None
     
     clip_bounds = (-5, 5)
     X_train_scaled = np.clip(X_train_scaled, clip_bounds[0], clip_bounds[1])
     X_val_scaled = np.clip(X_val_scaled, clip_bounds[0], clip_bounds[1])
-    X_test_scaled = np.clip(X_test_scaled, clip_bounds[0], clip_bounds[1])
+    if X_test_scaled is not None:
+        X_test_scaled = np.clip(X_test_scaled, clip_bounds[0], clip_bounds[1])
     
     return X_train_scaled, X_val_scaled, X_test_scaled, scaler
+
+
 
 def apply_feature_selection(X_train_scaled, X_val_scaled, X_test_scaled, y_train, 
                            method, n_components=None, n_features=None, random_state=42):
@@ -203,28 +217,45 @@ def balance_classes(X_train, y_train, random_state):
     print(f"Balanced training set: {X_train_balanced.shape[0]} samples")
     return X_train_balanced, y_train_balanced
 
-def apply_pca_for_knn(X_train, X_val, X_test, n_components, random_state):
+
+def apply_pca_for_knn(X_train_scaled, X_val_scaled, X_test_scaled=None, n_components=30, random_state=42):
     """
-    Apply PCA specifically for KNN to reduce dimensionality.
-    
+    Apply PCA for KNN to reduce dimensionality on scaled data.
+
     Args:
-        X_train, X_val, X_test: Data splits
+        X_train_scaled: Scaled training features
+        X_val_scaled: Scaled validation features
+        X_test_scaled: Scaled test features (optional, defaults to None)
         n_components: Number of PCA components
-        random_state: Random seed
+        random_state: Random seed for reproducibility
+
+    Returns:
+        Tuple of (X_train_pca, X_val_pca, X_test_pca, pca):
+        PCA-transformed training, validation, and test data (X_test_pca is None if X_test_scaled is None), plus PCA object
     """
-    pca = PCA(n_components=n_components, random_state=random_state)
-    X_train_pca = pca.fit_transform(X_train)
-    X_val_pca = pca.transform(X_val)
-    X_test_pca = pca.transform(X_test)
+    # Ensure n_components does not exceed the number of features or samples
+    n_components = min(n_components, X_train_scaled.shape[1], X_train_scaled.shape[0])
     
+    # Initialize and fit PCA on training data only
+    pca = PCA(n_components=n_components, random_state=random_state)
+    X_train_pca = pca.fit_transform(X_train_scaled)
+    
+    # Transform validation data
+    X_val_pca = pca.transform(X_val_scaled)
+    
+    # Transform test data if provided
+    X_test_pca = pca.transform(X_test_scaled) if X_test_scaled is not None else None
+    
+    # Calculate and print explained variance
     explained_variance = np.sum(pca.explained_variance_ratio_)
     print(f"PCA for KNN with {n_components} components explains {explained_variance:.2%} of variance")
     
-    return X_train_pca, X_val_pca, X_test_pca
+    return X_train_pca, X_val_pca, X_test_pca, pca
+
 
 def train_supervised_models(X_train, y_train, X_val, y_val, random_state):
     """
-    Train supervised models with GridSearchCV. 
+    Train supervised models with GridSearchCV.
     """
     models = {}
     
@@ -245,9 +276,9 @@ def train_supervised_models(X_train, y_train, X_val, y_val, random_state):
         'logistic': {
             'model': LogisticRegression(max_iter=10000, random_state=random_state),
             'params': {
-                'C': [0.05, 0.1, 0.3], # Regularization strength, not infinity
-                'solver': ['liblinear', 'saga'], # saga is faster for large datasets
-                'class_weight': ['balanced'] # 'balanced' means to use the class distribution in the training data
+                'C': [0.05, 0.1, 0.3],
+                'solver': ['liblinear', 'saga'],
+                'class_weight': ['balanced']
             }
         },
         'random_forest': {
@@ -263,26 +294,26 @@ def train_supervised_models(X_train, y_train, X_val, y_val, random_state):
         'knn': {
             'model': KNeighborsClassifier(),
             'params': {
-                'n_neighbors': [3, 5, 7, 9], # Odd numbers to avoid ties
+                'n_neighbors': [3, 5, 7, 9],
                 'weights': ['distance', class_weighted_distance(X_train, y_train)],
-                'metric': ['cosine', 'manhattan'] # Cosine and Manhattan distances are more robust to high-dimensional data 
+                'metric': ['cosine', 'manhattan']
             }
         },
         'gradient_boosting': {
             'model': GradientBoostingClassifier(random_state=random_state),
             'params': {
-                'n_estimators': [50, 100], # Number of boosting stages
-                'max_depth': [2, 3],   # Shallow trees to avoid overfitting
-                'learning_rate': [0.01, 0.03], 
-                'subsample': [0.7, 0.8] # Fraction of samples to use for fitting the trees
+                'n_estimators': [50, 100],
+                'max_depth': [2, 3],
+                'learning_rate': [0.01, 0.03],
+                'subsample': [0.7, 0.8]
             }
         },
         'svm': {
             'model': SVC(random_state=random_state, probability=True),
             'params': {
-                'C': [0.1, 0.3, 0.5], # Regularization parameter
-                'kernel': ['rbf'], # Radial basis function kernel, default
-                'gamma': ['scale', 0.005], #gamma='scale' is default in SVC, but 0.005 in case it is better
+                'C': [0.1, 0.3, 0.5],
+                'kernel': ['rbf'],
+                'gamma': ['scale', 0.005],
                 'class_weight': ['balanced']
             }
         }
@@ -291,16 +322,19 @@ def train_supervised_models(X_train, y_train, X_val, y_val, random_state):
     for name, model_info in model_params.items():
         print(f"\nTraining {name}...")
         
-        # Apply PCA for KNN
+        # Apply scaling and PCA for KNN
         if name == 'knn':
-            X_train_scaled, X_val_scaled, X_test_scaled, scaler = scale_features(
-                X_train, X_val, X_val, model_name='knn'
+            # Scale features for training and validation sets
+            X_train_scaled, X_val_scaled, _, scaler = scale_features(
+                X_train, X_val, None, model_name='knn'
             )
-            X_train_proc, X_val_proc, _ = apply_pca_for_knn(
-                X_train_scaled, X_val_scaled, X_val_scaled, n_components=30, random_state=random_state
+            # Apply PCA for training and validation sets
+            X_train_proc, X_val_proc, _, pca = apply_pca_for_knn(
+                X_train_scaled, X_val_scaled, None, n_components=30, random_state=random_state
             )
         else:
             X_train_proc, X_val_proc = X_train, X_val
+            scaler, pca = None, None
         
         model = model_info['model']
         params = model_info['params']
@@ -325,7 +359,7 @@ def train_supervised_models(X_train, y_train, X_val, y_val, random_state):
             'params': best_params,
             'val_accuracy': val_accuracy,
             'scaler': scaler if name == 'knn' else None,
-            'pca': PCA(n_components=30, random_state=random_state).fit(X_train_scaled) if name == 'knn' else None
+            'pca': pca if name == 'knn' else None
         }
     
     return models
@@ -359,18 +393,6 @@ def perform_unsupervised_clustering(X_train, y_train, X_val, y_val, n_clusters, 
 def evaluate_models_on_test_set(models, kmeans, X_train, y_train, X_test, y_test, movement_names):
     """
     Evaluate all models on the test set.
-    
-    Args:
-        models: Dictionary of supervised models
-        kmeans: KMeans clustering model
-        X_train: Training data
-        y_train: Training labels
-        X_test: Test data
-        y_test: Test labels
-        movement_names: Names of literary movements
-    
-    Returns:
-        Dictionary of test results
     """
     results = {}
     
@@ -399,7 +421,7 @@ def evaluate_models_on_test_set(models, kmeans, X_train, y_train, X_test, y_test
             'predictions': y_pred,
             'report': classification_report(y_test, y_pred, target_names=movement_names, output_dict=True)
         }
-    
+    # K-means evaluation
     cluster_to_label = {}
     default_label = np.bincount(y_train).argmax()
     for cluster in range(kmeans.n_clusters):

@@ -7,6 +7,6 @@ svm: 0.6585
 kmeans: 0.4390
 
 Best model: svm
-Timestamp: 20250514_132739
+Timestamp: 20250516_133647
 Feature count: 176
 Literary movements: Gothicism, Modernism, Naturalism, Realism, Renaissance, Romanticism, Transcendentalism
