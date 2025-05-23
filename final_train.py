@@ -24,7 +24,7 @@ from datetime import datetime
 warnings.filterwarnings('ignore')
 
 def parse_arguments():
-    """Parse command line arguments."""
+    """Parse command line arguments for the script (mostly for debug). Also sets default values."""
     parser = argparse.ArgumentParser(description='Train models for literary movement classification')
     parser.add_argument('--data', type=str, default='text_features.csv', 
                         help='Path to the features CSV file')
@@ -91,7 +91,7 @@ def load_and_preprocess_data(data_path, random_state):
     return X, y_encoded, feature_names, movement_names, df
 
 def create_interaction_terms(X, top_n=10):
-    """Create interaction terms for the top features"""
+    """Create interaction terms for the top features based on variance."""
     X_new = pd.DataFrame()
     variances = X.var().sort_values(ascending=False)
     top_features = variances.index[:top_n]
@@ -104,7 +104,7 @@ def create_interaction_terms(X, top_n=10):
 
 def create_data_splits(X, y, test_size, val_size, random_state):
     """
-    Create train/validation/test splits.
+    Create train/validation/test splits for the dataset. 
     """
     X_trainval, X_test, y_trainval, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y
@@ -125,16 +125,11 @@ def create_data_splits(X, y, test_size, val_size, random_state):
 def scale_features(X_train, X_val, X_test=None, model_name='default'):
     """
     Scale/clip features using StandardScaler or RobustScaler based on model.
-
-    Args:
-        X_train: Training features
-        X_val: Validation features
-        X_test: Test features (optional, defaults to None)
-        model_name: Model name to determine scaler type ('knn' or 'default')
+    model_name: Model name to determine scaler type ('knn' or 'default')
 
     Returns:
         Tuple of (X_train_scaled, X_val_scaled, X_test_scaled, scaler):
-        Scaled training, validation, and test data (X_test_scaled is None if X_test is None), plus scaler object
+        Scaled training, validation, and test data (X_test_scaled is None if X_test is None), plus scaler 
     """
     if model_name == 'knn':
         scaler = RobustScaler()
@@ -155,21 +150,15 @@ def scale_features(X_train, X_val, X_test=None, model_name='default'):
 
 
 
-def apply_feature_selection(X_train_scaled, X_val_scaled, X_test_scaled, y_train, 
-                           method, n_components=None, n_features=None, random_state=42):
+def apply_feature_selection(X_train_scaled, X_val_scaled, X_test_scaled, y_train, method, n_components=None, n_features=None, random_state=42):
     """
     Apply feature selection based on the specified method.
     
-    Args:
-        X_train_scaled, X_val_scaled, X_test_scaled: Scaled data
-        y_train: Training labels
-        method: Feature selection method ('pca', 'selectkbest', 'none')
-        n_components: Number of PCA components (if method is 'pca')
-        n_features: Number of features to select (if method is 'selectkbest')
-        random_state: Random seed
-    
-    Returns:
-        Reduced/selected data and the feature selection object
+    method: Feature selection method ('pca', 'selectkbest', 'none')
+    n_components: Number of PCA components (if method is 'pca')
+    n_features: Number of features to select (if method is 'selectkbest')
+
+    returns reduced/selected data and the feature selection object
     """
     if method == 'none':
         return X_train_scaled, X_val_scaled, X_test_scaled, None
@@ -202,15 +191,7 @@ def apply_feature_selection(X_train_scaled, X_val_scaled, X_test_scaled, y_train
 
 def balance_classes(X_train, y_train, random_state):
     """
-    Apply SMOTE to balance classes in the training set.
-    
-    Args:
-        X_train: Training features
-        y_train: Training labels
-        random_state: Random seed
-    
-    Returns:
-        Balanced training data
+    Apply SMOTE to balance classes in the training set to avoid class imbalance.
     """
     smote = SMOTE(random_state=random_state, k_neighbors=3, sampling_strategy='auto')
     X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
@@ -221,14 +202,6 @@ def balance_classes(X_train, y_train, random_state):
 def apply_pca_for_knn(X_train_scaled, X_val_scaled, X_test_scaled=None, n_components=30, random_state=42):
     """
     Apply PCA for KNN to reduce dimensionality on scaled data.
-
-    Args:
-        X_train_scaled: Scaled training features
-        X_val_scaled: Scaled validation features
-        X_test_scaled: Scaled test features (optional, defaults to None)
-        n_components: Number of PCA components
-        random_state: Random seed for reproducibility
-
     Returns:
         Tuple of (X_train_pca, X_val_pca, X_test_pca, pca):
         PCA-transformed training, validation, and test data (X_test_pca is None if X_test_scaled is None), plus PCA object
@@ -246,7 +219,7 @@ def apply_pca_for_knn(X_train_scaled, X_val_scaled, X_test_scaled=None, n_compon
     # Transform test data if provided
     X_test_pca = pca.transform(X_test_scaled) if X_test_scaled is not None else None
     
-    # Calculate and print explained variance
+    #explained variance
     explained_variance = np.sum(pca.explained_variance_ratio_)
     print(f"PCA for KNN with {n_components} components explains {explained_variance:.2%} of variance")
     
@@ -255,7 +228,7 @@ def apply_pca_for_knn(X_train_scaled, X_val_scaled, X_test_scaled=None, n_compon
 
 def train_supervised_models(X_train, y_train, X_val, y_val, random_state):
     """
-    Train supervised models with GridSearchCV.
+    Train supervised models with GridSearchCV for hyperparameter tuning.
     """
     models = {}
     
@@ -366,16 +339,7 @@ def train_supervised_models(X_train, y_train, X_val, y_val, random_state):
 
 def perform_unsupervised_clustering(X_train, y_train, X_val, y_val, n_clusters, random_state):
     """
-    Perform unsupervised clustering with KMeans.
-    
-    Args:
-        X_train, y_train: Training data
-        X_val, y_val: Validation data
-        n_clusters: Number of clusters
-        random_state: Random seed
-    
-    Returns:
-        Trained KMeans model
+    Perform unsupervised clustering with KMeans
     """
     print("\nPerforming K-means clustering...")
     kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=20)
@@ -421,7 +385,7 @@ def evaluate_models_on_test_set(models, kmeans, X_train, y_train, X_test, y_test
             'predictions': y_pred,
             'report': classification_report(y_test, y_pred, target_names=movement_names, output_dict=True)
         }
-    # K-means evaluation
+    # K-means 
     cluster_to_label = {}
     default_label = np.bincount(y_train).argmax()
     for cluster in range(kmeans.n_clusters):
@@ -447,23 +411,7 @@ def evaluate_models_on_test_set(models, kmeans, X_train, y_train, X_test, y_test
     
     return results
 
-def create_visualizations(X_train, y_train, kmeans, X_test, y_test, movement_names, 
-                         results, output_dir, random_state, models, feature_names, pca_obj=None):
-    """
-    Create visualizations of the results.
-    
-    Args:
-        X_train, y_train: Training data
-        kmeans: KMeans clustering model
-        X_test, y_test: Test data
-        movement_names: Names of literary movements
-        results: Dictionary of test results
-        output_dir: Directory to save plots
-        random_state: Random seed
-        models: Dictionary of trained models
-        feature_names: Names of features
-        pca_obj: PCA object if PCA was used for dimensionality reduction
-    """
+def create_visualizations(X_train, y_train, kmeans, X_test, y_test, movement_names, results, output_dir, random_state, models, feature_names, pca_obj=None):
     viz_dir = os.path.join(output_dir, 'visualizations')
     os.makedirs(viz_dir, exist_ok=True)
     
@@ -637,18 +585,16 @@ def visualize_kmeans_with_pca(X, kmeans, y, movement_names, output_dir=None, ran
     # Get cluster assignments
     cluster_labels = kmeans.predict(X)
     
-    # Create a figure with a white background and border
+    #Create figure 
     fig, ax = plt.subplots(figsize=(12, 10))
     fig.patch.set_facecolor('white')
     for spine in ax.spines.values():
         spine.set_visible(True)
         spine.set_color('black')
         spine.set_linewidth(1)
-    
-    # Choose distinct color palettes
+
     cluster_palette = sns.color_palette("tab10", kmeans.n_clusters)
     
-    # Define markers for literary movements
     markers = {
         'Gothicism': 'o',        # circle
         'Modernism': '^',        # triangle up
@@ -674,24 +620,23 @@ def visualize_kmeans_with_pca(X, kmeans, y, movement_names, output_dir=None, ran
                     label=f'{movement} (Cluster {i})' if j == 0 else None  # Only add to legend once per cluster
                 )
     
-    # Create custom legend elements
+    # legend stuff
     from matplotlib.lines import Line2D
     
-    # First legend for clusters
+    # 1 legend for clusters
     cluster_legend_elements = [
         Line2D([0], [0], marker='o', color='w', markerfacecolor=cluster_palette[i], 
                markersize=10, label=f'Cluster {i}')
         for i in range(kmeans.n_clusters)
     ]
     
-    # Second legend for movements
+    # 2 legend for movements
     movement_legend_elements = [
         Line2D([0], [0], marker=markers[movement], color='black', 
                markersize=10, label=movement)
         for movement in movement_names
     ]
     
-    # Add legends
     cluster_legend = ax.legend(handles=cluster_legend_elements, loc='upper left', 
                               title="Clusters", bbox_to_anchor=(0.01, 0.99))
     ax.add_artist(cluster_legend)
@@ -704,12 +649,10 @@ def visualize_kmeans_with_pca(X, kmeans, y, movement_names, output_dir=None, ran
     ax.set_ylabel(f'PCA Component 2', fontsize=12)
     ax.set_title('K-Means Clusters Visualized with PCA', fontsize=14)
     
-    # Add grid
     ax.grid(True, linestyle='--', alpha=0.7)
     
     plt.tight_layout()
     
-    # Save if output directory is provided
     if output_dir:
         viz_dir = os.path.join(output_dir, 'visualizations')
         os.makedirs(viz_dir, exist_ok=True)

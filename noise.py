@@ -9,7 +9,6 @@ from imblearn.over_sampling import SMOTE
 import warnings
 warnings.filterwarnings('ignore')
 
-# Load data
 data = pd.read_csv('text_features.csv')
 X = data.drop(['Movement', 'Author', 'GutenbergID'], axis=1)
 y = data['Movement']
@@ -38,14 +37,14 @@ svm = SVC()
 grid_search = GridSearchCV(svm, param_grid, cv=5, scoring='accuracy', n_jobs=-1)
 grid_search.fit(X_train_selected, y_train_smote)
 
-# Evaluate original model
+# original model
 best_svm = grid_search.best_estimator_
 y_pred_test = best_svm.predict(X_test_selected)
 original_accuracy = accuracy_score(y_test, y_pred_test)
 original_f1_renaissance = f1_score(y_test, y_pred_test, labels=['Renaissance'], average=None)[0]
 print(f"Original SVM - Test Accuracy: {original_accuracy:.4f}, Renaissance F1: {original_f1_renaissance:.4f}")
 
-# Add Gaussian noise (sigma=0.1) to validation and test data
+# Add Gaussian noise sigma=0.1 to validation and test data 
 np.random.seed(42)
 X_val_noisy = X_val + np.random.normal(0, 0.1, X_val.shape)
 X_test_noisy = X_test + np.random.normal(0, 0.1, X_test.shape)
@@ -56,7 +55,7 @@ X_val_noisy_selected = selector.transform(X_val_noisy_scaled)
 X_test_noisy_scaled = scaler.transform(X_test_noisy)
 X_test_noisy_selected = selector.transform(X_test_noisy_scaled)
 
-# Train and evaluate with noisy data
+#train evaluate with noisy data
 grid_search_noisy = GridSearchCV(svm, param_grid, cv=5, scoring='accuracy', n_jobs=-1)
 grid_search_noisy.fit(X_train_selected, y_train_smote)  # Train on original data
 y_pred_test_noisy = grid_search_noisy.best_estimator_.predict(X_test_noisy_selected)

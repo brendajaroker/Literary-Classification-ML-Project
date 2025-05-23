@@ -22,17 +22,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pickle
 import joblib
 
-# Download NLTK data
 nltk.download('wordnet')
 nltk.download('stopwords')
 nltk.download('punkt')
 nltk.download('averaged_perceptron_tagger')
 
-# Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger()
 
-# Load SpaCy model
+#SpaCy model
 try:
     nlp = spacy.load("en_core_web_md", disable=["ner"])
 except OSError:
@@ -40,14 +38,14 @@ except OSError:
     os.system("python -m spacy download en_core_web_md")
     nlp = spacy.load("en_core_web_md", disable=["ner"])
 
-# Custom stopwords
+# Custom stopwords and lemmatizer 
 stop_words = set(stopwords.words('english')) - {'no', 'not', 'very', 'few', 'more', 'most', 'against', 'own'}
-movement_stopwords = {'nature', 'heart', 'beauty', 'time'}  # Ambiguous across movements
+movement_stopwords = {'nature', 'heart', 'beauty', 'time'}  #ambiguous across movements 
 stop_words.update(movement_stopwords)
 
 lemmatizer = WordNetLemmatizer()
 
-# Enhanced movement-specific features with bigrams
+# More movement-specific features w bigrams
 movement_specific_features = {
     "Romanticism": [
         "sublime", "melancholy", "solitude", "wilderness", "supernatural", "imagination",
@@ -94,7 +92,6 @@ movement_specific_features = {
     ]
 }
 
-# Temporal markers
 temporal_markers = {
     "Renaissance": [
         "thee", "thou", "thy", "hath", "doth", "art", "wert", "hast", "forsooth", "methinks"
@@ -137,15 +134,15 @@ def calculate_readability_metrics(text):
         avg_sentence_length = word_count / len(sentences)
         avg_syllables_per_word = sum(syllable_counts) / word_count
         
-        # Dale-Chall: Use a simple approximation
+        # Dale-Chall: Use a simple approximation for difficult words w > 2 syllables
         difficult_words = sum(1 for word in set(words) if count_syllables(word) > 2 and word not in stop_words)
         dale_chall = 0.1579 * (100 * difficult_words / word_count) + 0.0496 * avg_sentence_length
         if difficult_words / word_count > 0.05:
-            dale_chall += 3.6365
+            dale_chall += 3.6365    # penalty for high difficult word ratio
         
-        flesch = 206.835 - (1.015 * avg_sentence_length) - (84.6 * avg_syllables_per_word)
+        flesch = 206.835 - (1.015 * avg_sentence_length) - (84.6 * avg_syllables_per_word) # Flesch Reading Ease
         gunning_fog = 0.4 * (avg_sentence_length + (100 * complex_words / word_count))
-        smog = 1.043 * np.sqrt(30 * complex_words / len(sentences)) + 3.1291
+        smog = 1.043 * np.sqrt(30 * complex_words / len(sentences)) + 3.1291 # SMOG Index
         ari = 4.71 * (total_chars / word_count) + 0.5 * (word_count / len(sentences)) - 21.43
         L = (total_chars / word_count) * 100
         S = (len(sentences) / word_count) * 100
@@ -164,7 +161,7 @@ def calculate_readability_metrics(text):
 
 def extract_syntactic_features(text):
     """
-    Extract syntactic features with dependency parsing.
+    Extract syntactic features with dependency parsing and POS tagging. 
     """
     sentences = sent_tokenize(text[:50000])
     if not sentences:
@@ -213,7 +210,7 @@ def extract_syntactic_features(text):
         **pos_features,
         **dep_features
     }
-# Function to count syllables in a word with improved accuracy
+# Function to count syllables in a word... try to get good accuracy
 def count_syllables(word):
     try:
         word = word.lower().strip()
@@ -266,7 +263,7 @@ def count_syllables(word):
 
 def preprocess_text(text, for_vectorizer=True):
     """
-    Preprocess text, preserving stylistic elements.
+    Preprocess text, preserving stylistic elements for vectorization.
     """
     try:
         doc = nlp(text[:50000])
@@ -391,7 +388,7 @@ def download_gutenberg_text(gid):
 
 def extract_tfidf_features(texts, max_features=500):
     """
-    Extract TF-IDF features with sublinear scaling.
+    Extract TF-IDF features with sublinear scaling and n-grams. 
     """
     try:
         vectorizer = TfidfVectorizer(
@@ -405,7 +402,7 @@ def extract_tfidf_features(texts, max_features=500):
 
 def extract_lda_features(texts, num_topics=15):
     """
-    Extract LDA topic features with TF-IDF input.
+    Extract LDA topic features with TF-IDF input and averaging.
     """
     try:
         vectorizer = TfidfVectorizer(max_features=1000, min_df=2)
@@ -427,7 +424,8 @@ def extract_lda_features(texts, num_topics=15):
 
 def extract_nmf_features(texts, num_topics=15):
     """
-    Extract NMF topic features.
+    Extract NMF topic features with TF-IDF input and averaging.
+    Uses "sublinear scaling" and n-grams.
     """
     try:
         vectorizer = TfidfVectorizer(max_features=1000, min_df=2)
@@ -441,7 +439,8 @@ def extract_nmf_features(texts, num_topics=15):
 
 def extract_embedding_features(texts):
     """
-    Extract mean GloVe embeddings from SpaCy.
+    Extract mean GloVe embeddings from SpaCy for each text.
+    Uses en_core_web_md for 300D vectors. en_core_web_md uses GloVe vectors.
     """
     try:
         embeddings = np.zeros((len(texts), 300))  # en_core_web_md uses 300D vectors
@@ -475,7 +474,7 @@ def extract_movement_term_features(text):
     tfidf_scores = dict(zip(vectorizer.get_feature_names_out(), tfidf_matrix.toarray()[0]))
     
     for movement, terms in movement_specific_features.items():
-        term_score = sum(tfidf_scores.get(term, 0) for term in terms)
+        term_score = sum(tfidf_scores.get(term, 0) for term in terms) # sum of TF-IDF scores
         features[f"{movement}_term_score"] = term_score
     
     return features
@@ -497,7 +496,7 @@ def extract_temporal_features(text):
 
 def extract_sentiment_features(text):
     """
-    Extract sentiment polarity and subjectivity.
+    Extract sentiment polarity and subjectivity like in poetry paper. 
     """
     try:
         blob = TextBlob(text[:50000])
@@ -511,7 +510,7 @@ def extract_sentiment_features(text):
 
 def select_features(X, y, feature_names, k=200):
     """
-    Select top k features using mutual_info_classif.
+    Select top k features using mutual_info_classif and apply PCA.
     """
     try:
         selector = SelectKBest(mutual_info_classif, k=k)
@@ -532,7 +531,7 @@ def select_features(X, y, feature_names, k=200):
         logger.error(f"Error in feature selection: {e}")
         return X, feature_names
 
-def process_texts(metadata_file, output_file="edited_text_features.csv", max_texts=None):
+def process_texts(metadata_file, output_file="text_features.csv", max_texts=None):
     """
     Process texts and extract features, saving to CSV.
     """
@@ -544,7 +543,7 @@ def process_texts(metadata_file, output_file="edited_text_features.csv", max_tex
         
         logger.info(f"Processing {len(df)} texts")
         
-        # Cache directory
+        # Cache directory of old stuff
         cache_dir = "data/text_cache"
         os.makedirs(cache_dir, exist_ok=True)
         
@@ -602,16 +601,13 @@ def process_texts(metadata_file, output_file="edited_text_features.csv", max_tex
             
             # Readability metrics
             text_features.update(calculate_readability_metrics(text))
-            
             # Syntactic features
             text_features.update(extract_syntactic_features(text))
             
             # Movement-specific terms
             text_features.update(extract_movement_term_features(text))
-            
             # Temporal markers
             text_features.update(extract_temporal_features(text))
-            
             # Sentiment
             text_features.update(extract_sentiment_features(text))
             
@@ -620,7 +616,7 @@ def process_texts(metadata_file, output_file="edited_text_features.csv", max_tex
                 feature_names.extend(list(text_features.keys()))
         
         # Combine features
-        X = np.hstack([f for f in features if f.shape[0] == len(texts)])
+        X = np.hstack([f for f in features if f.shape[0] == len(texts)]) # hstack only valid features
         
         # Feature selection
         y = df['Movement'].values
@@ -632,7 +628,6 @@ def process_texts(metadata_file, output_file="edited_text_features.csv", max_tex
         feature_df['Author'] = df['Author']
         feature_df['Movement'] = df['Movement']
         
-        # Save to CSV
         feature_df.to_csv(output_file, index=False)
         logger.info(f"Saved features to {output_file}")
         

@@ -9,31 +9,31 @@ from imblearn.over_sampling import SMOTE
 import warnings
 warnings.filterwarnings('ignore')
 
-# Load data
 data = pd.read_csv('text_features.csv')
 X = data.drop(['Movement', 'Author', 'GutenbergID'], axis=1)  # Features
 y = data['Movement']  # Labels
 
-# Train/validation/test split (69.63% train, 15.19% val, 15.19% test)
+# Train/validation/test split
 X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3037, random_state=42, stratify=y)
 X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42, stratify=y_temp)
 
-# Apply SMOTE to training data
+#SMOTE to training data
 smote = SMOTE(random_state=42)
 X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 
-# Pipeline for original SVM
+# original SVM pipeline
 scaler = StandardScaler()
 selector = SelectKBest(score_func=f_classif, k=50)
 X_train_scaled = scaler.fit_transform(X_train_smote)
-X_train_selected = selector.fit_transform(X_train_scaled, y_train_smote)
+X_train_selected = selector.fit_transform(X_train_scaled, y_train_smote) #selector top 50 features
 X_val_scaled = scaler.transform(X_val)
-X_val_selected = selector.transform(X_val_scaled)
+X_val_selected = selector.transform(X_val_scaled) 
 X_test_scaled = scaler.transform(X_test)
 X_test_selected = selector.transform(X_test_scaled)
 
 # SVM with GridSearchCV
-param_grid = {'C': [0.1, 0.3, 0.5], 'gamma': ['scale', 0.005], 'kernel': ['rbf'], 'class_weight': ['balanced']}
+param_grid = {'C': [0.1, 0.3, 0.5], 'gamma': ['scale', 0.005], 'kernel': ['rbf'], 'class_weight': ['balanced']} # Adjusted for class imbalance
+# balanced adjusts weights inversely prop to class frequencies in the data
 svm = SVC()
 grid_search = GridSearchCV(svm, param_grid, cv=5, scoring='accuracy', n_jobs=-1)
 grid_search.fit(X_train_selected, y_train_smote)
@@ -46,7 +46,7 @@ original_f1_renaissance = f1_score(y_test, y_pred_test, labels=['Renaissance'], 
 print(f"Original SVM - Test Accuracy: {original_accuracy:.4f}, Renaissance F1: {original_f1_renaissance:.4f}")
 
 # Ablation study
-features_to_remove = ['semicolons', 'present_tense_ratio']
+features_to_remove = ['semicolons', 'present_tense_ratio'] #remove most common
 X_train_ablated = X_train_smote.drop(features_to_remove, axis=1, errors='ignore')
 X_val_ablated = X_val.drop(features_to_remove, axis=1, errors='ignore')
 X_test_ablated = X_test.drop(features_to_remove, axis=1, errors='ignore')
